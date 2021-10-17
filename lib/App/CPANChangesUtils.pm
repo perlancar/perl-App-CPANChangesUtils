@@ -87,7 +87,7 @@ _
 sub format_cpan_changes {
     my %args = @_;
 
-    my $res = parse_cpan_changes(%args);
+    my $res = parse_cpan_changes(%args, unbless=>0);
     return $res unless $res->[0] == 200;
     [200, "OK", $res->[2]->serialize];
 }
