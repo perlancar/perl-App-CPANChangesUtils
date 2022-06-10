@@ -79,6 +79,9 @@ Note that the metadata names are converted to lowercase.
 _
         },
     },
+    examples => [
+        {args=>{}},
+    ],
 };
 sub parse_cpan_changes {
     require Data::Structure::Util;
