@@ -24,6 +24,8 @@ our %argspecs_common = (
     },
 );
 
+our $re_rel_metadata = qr/(?:([A-Za-z]+(?:-[A-Za-z]+)*):\s*([^;]*))/;
+
 $SPEC{parse_cpan_changes} = {
     v => 1.1,
     summary => 'Parse CPAN Changes file',
@@ -45,6 +47,37 @@ serializing Perl objects, e.g. on the CLI using `--format=perl`.
 
 _
         },
+        parse_release_metadata => {
+            summary => 'Whether to parse release metadata in release note',
+            schema => 'bool*',
+            default => 1,
+            description => <<'_',
+
+If set to true (the default), the utility will attempt to parse release metadata
+in the release note. The release note is the text after the version and date in
+the first line of a release entry:
+
+    0.001 - 2022-06-10 THIS IS THE RELEASE NOTE AND CAN BE ANY TEXT
+
+One convention I use is for the release note to be semicolon-separated of
+metadata entries, where each metadata is in the form of HTTP-header-like "Name:
+Value" text where Name is dash-separated words and Value is any text that does
+not contain newline or semicolon. Example:
+
+    0.001 - 2022-06-10  Urgency: high; Backward-Incompatible: yes
+
+Note that Debian changelog also supports "key=value" in the release line.
+
+This option, when enabled, will first check if the release note is indeed in the
+form of semicolon-separated metadata. If yes, will create a key called
+C<metadata> in the release result structure containing a hash of metadata:
+
+    { "urgency" => "high", "backward-incompatible" => "yes" }
+
+Note that the metadata names are converted to lowercase.
+
+_
+        },
     },
 };
 sub parse_cpan_changes {
@@ -52,6 +85,7 @@ sub parse_cpan_changes {
 
     my %args = @_;
     my $unbless = $args{unbless} // 1;
+    my $parse_release_metadata = $args{parse_release_metadata} // 1;
     my $class = $args{class} // 'CPAN::Changes';
     (my $class_pm = "$class.pm") =~ s!::!/!g;
     require $class_pm;
@@ -67,6 +101,20 @@ sub parse_cpan_changes {
         unless $file;
 
     my $ch = $class->load($file);
+
+    if ($parse_release_metadata) {
+        for my $rel ($ch->releases) {
+            my $note = $rel->note;
+            if ($note =~ /\A$re_rel_metadata(?:;\s*$re_rel_metadata)*/) {
+                my $meta = {};
+                while ($note =~ /$re_rel_metadata/g) {
+                    $meta->{lc $1} = $2;
+                }
+                $rel->{metadata} = $meta;
+            }
+        }
+    }
+
     [200, "OK", $unbless ? Data::Structure::Util::unbless($ch) : $ch];
 }
 
